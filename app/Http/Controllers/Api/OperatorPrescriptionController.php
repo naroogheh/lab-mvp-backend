@@ -18,7 +18,7 @@ class OperatorPrescriptionController extends Controller
 
     public function show(Prescription $prescription)
     {
-        return $prescription->load('items.labTest');
+        return $prescription->load('items.labTest', 'aiRequestLogs');
     }
 
     public function updateItems(Request $request, Prescription $prescription)

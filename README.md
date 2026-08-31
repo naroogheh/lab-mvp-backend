@@ -24,6 +24,32 @@ php artisan migrate --seed
 php artisan serve
 ```
 
+## Docker Setup
+
+These ports were chosen to avoid the currently running local Docker projects:
+
+```text
+App:        http://localhost:8081
+phpMyAdmin: http://localhost:8082
+MySQL:      localhost:3307
+```
+
+Start the stack:
+
+```text
+docker compose up -d --build
+docker compose exec app php artisan key:generate
+docker compose exec app php artisan migrate --seed
+```
+
+phpMyAdmin login:
+
+```text
+Server:   mysql
+Username: lab_mvp
+Password: lab_mvp_secret
+```
+
 ## Request Statuses
 
 ```text

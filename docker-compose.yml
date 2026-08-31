@@ -1,0 +1,79 @@
+name: lab_mvp_backend
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: lab_mvp_app
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - .:/var/www/html
+      - app_vendor:/var/www/html/vendor
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - lab_mvp
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: lab_mvp_nginx
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - .:/var/www/html:ro
+      - app_vendor:/var/www/html/vendor:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - lab_mvp
+
+  mysql:
+    image: mysql:8.4
+    container_name: lab_mvp_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: lab_mvp
+      MYSQL_ROOT_PASSWORD: lab_mvp_root
+      MYSQL_USER: lab_mvp
+      MYSQL_PASSWORD: lab_mvp_secret
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lab_mvp
+
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    container_name: lab_mvp_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8082:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - lab_mvp
+
+networks:
+  lab_mvp:
+    driver: bridge
+
+volumes:
+  app_vendor:
+  mysql_data:

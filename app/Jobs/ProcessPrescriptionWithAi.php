@@ -23,7 +23,10 @@ class ProcessPrescriptionWithAi implements ShouldQueue
         $prescription->update(['status' => PrescriptionStatus::AiProcessing]);
 
         try {
-            $tests = $extractor->extract(storage_path('app/' . $prescription->image_path));
+            $tests = $extractor->extract(
+                storage_path('app/' . $prescription->image_path),
+                $prescription->id
+            );
             $items = $matcher->match($tests);
 
             $prescription->items()->delete();

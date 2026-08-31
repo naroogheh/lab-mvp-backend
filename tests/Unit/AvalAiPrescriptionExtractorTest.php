@@ -19,6 +19,8 @@ class AvalAiPrescriptionExtractorTest extends TestCase
         config([
             'services.avalai.key' => 'test-key',
             'services.avalai.endpoint' => 'https://api.avalai.ir/v1',
+            'services.avalai.proxy_base_url' => null,
+            'services.avalai.proxy_token' => null,
             'services.avalai.vision_model' => 'gpt-5.5',
             'services.avalai.input_cost_per_1m_tokens' => 5.00,
             'services.avalai.output_cost_per_1m_tokens' => 30.00,

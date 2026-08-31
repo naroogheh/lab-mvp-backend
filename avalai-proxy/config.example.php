@@ -9,5 +9,5 @@ return [
     'avalai_upstream_base_url' => 'https://api.avalai.ir',
     'connect_timeout_seconds' => 15,
     'request_timeout_seconds' => 180,
-    'max_request_bytes' => 20 * 1024 * 1024,
+    'max_request_bytes' => 64 * 1024 * 1024,
 ];

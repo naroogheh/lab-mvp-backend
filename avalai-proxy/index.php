@@ -129,6 +129,146 @@ function proxyRoutePath(string $requestUri): string
     return $path === '' ? '/' : '/'.ltrim($path, '/');
 }
 
+/** @return array{path: string, body: string, headers: array<int, string>} */
+function upstreamRequest(string $path, string $body, array $headers): array
+{
+    if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST' || $path !== '/v1/responses') {
+        return ['path' => $path, 'body' => $body, 'headers' => []];
+    }
+
+    $contentType = strtolower((string) ($headers['content-type'] ?? ''));
+    if ($body === '' || ! str_contains($contentType, 'application/json')) {
+        return ['path' => $path, 'body' => $body, 'headers' => []];
+    }
+
+    try {
+        $payload = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+    } catch (Throwable) {
+        return ['path' => $path, 'body' => $body, 'headers' => []];
+    }
+
+    if (! is_array($payload) || ! isset($payload['input'])) {
+        return ['path' => $path, 'body' => $body, 'headers' => []];
+    }
+
+    $chatPayload = responsesPayloadToChatCompletions($payload);
+    if ($chatPayload === null) {
+        return ['path' => $path, 'body' => $body, 'headers' => []];
+    }
+
+    return [
+        'path' => '/v1/chat/completions',
+        'body' => json_encode($chatPayload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        'headers' => ['X-Proxy-Upstream-Endpoint: /v1/chat/completions'],
+    ];
+}
+
+/** @param array<string, mixed> $payload */
+function responsesPayloadToChatCompletions(array $payload): ?array
+{
+    $messages = responsesInputToMessages($payload['input']);
+    if ($messages === []) {
+        return null;
+    }
+
+    $chatPayload = [
+        'model' => $payload['model'] ?? 'gpt-4o-mini',
+        'messages' => $messages,
+    ];
+
+    foreach (['temperature', 'top_p', 'stream', 'tools', 'tool_choice', 'metadata'] as $key) {
+        if (array_key_exists($key, $payload)) {
+            $chatPayload[$key] = $payload[$key];
+        }
+    }
+
+    if (array_key_exists('max_output_tokens', $payload)) {
+        $chatPayload['max_tokens'] = $payload['max_output_tokens'];
+    } elseif (array_key_exists('max_tokens', $payload)) {
+        $chatPayload['max_tokens'] = $payload['max_tokens'];
+    }
+
+    if (isset($payload['response_format'])) {
+        $chatPayload['response_format'] = $payload['response_format'];
+    }
+
+    return $chatPayload;
+}
+
+function responsesInputToMessages(mixed $input): array
+{
+    if (is_string($input) && trim($input) !== '') {
+        return [['role' => 'user', 'content' => $input]];
+    }
+
+    if (! is_array($input)) {
+        return [];
+    }
+
+    $messages = [];
+    foreach ($input as $item) {
+        if (! is_array($item)) {
+            continue;
+        }
+
+        $role = isset($item['role']) && is_string($item['role']) ? $item['role'] : 'user';
+        $content = responsesContentToChatContent($item['content'] ?? null);
+        if ($content === null || $content === []) {
+            continue;
+        }
+
+        $messages[] = [
+            'role' => in_array($role, ['system', 'user', 'assistant', 'tool'], true) ? $role : 'user',
+            'content' => $content,
+        ];
+    }
+
+    return $messages;
+}
+
+function responsesContentToChatContent(mixed $content): mixed
+{
+    if (is_string($content)) {
+        return $content;
+    }
+
+    if (! is_array($content)) {
+        return null;
+    }
+
+    $chatContent = [];
+    foreach ($content as $part) {
+        if (! is_array($part)) {
+            continue;
+        }
+
+        $type = $part['type'] ?? null;
+        if ($type === 'input_text' || $type === 'text') {
+            $text = $part['text'] ?? '';
+            if (is_string($text) && $text !== '') {
+                $chatContent[] = ['type' => 'text', 'text' => $text];
+            }
+            continue;
+        }
+
+        if ($type === 'input_image' || $type === 'image_url') {
+            $imageUrl = $part['image_url'] ?? null;
+            if (is_array($imageUrl)) {
+                $imageUrl = $imageUrl['url'] ?? null;
+            }
+            if (is_string($imageUrl) && $imageUrl !== '') {
+                $image = ['url' => $imageUrl];
+                if (isset($part['detail']) && is_string($part['detail'])) {
+                    $image['detail'] = $part['detail'];
+                }
+                $chatContent[] = ['type' => 'image_url', 'image_url' => $image];
+            }
+        }
+    }
+
+    return $chatContent;
+}
+
 $local = localConfig();
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
@@ -166,7 +306,7 @@ $upstreamBaseUrl = rtrim((string) configValue(
 ), '/');
 $connectTimeout = max(1, (int) configValue($local, 'PROXY_CONNECT_TIMEOUT', 'connect_timeout_seconds', 15));
 $requestTimeout = max(1, (int) configValue($local, 'PROXY_REQUEST_TIMEOUT', 'request_timeout_seconds', 180));
-$maxRequestBytes = max(1024, (int) configValue($local, 'PROXY_MAX_REQUEST_BYTES', 'max_request_bytes', 20 * 1024 * 1024));
+$maxRequestBytes = max(1024, (int) configValue($local, 'PROXY_MAX_REQUEST_BYTES', 'max_request_bytes', 64 * 1024 * 1024));
 
 if ($proxyAccessToken === '') {
     jsonError(500, 'proxy_not_configured', 'The proxy access token is not configured.');
@@ -197,11 +337,16 @@ if (strlen($body) > $maxRequestBytes) {
     jsonError(413, 'request_too_large', 'The request body exceeds the configured limit.');
 }
 
+$translated = upstreamRequest($path, $body, $headers);
+$path = $translated['path'];
+$body = $translated['body'];
+
 $query = (string) (parse_url($requestUri, PHP_URL_QUERY) ?? '');
 $upstreamUrl = $upstreamBaseUrl.$path.($query !== '' ? '?'.$query : '');
 $forwardHeaders = [
     'Authorization: Bearer '.$providedAvalaiToken,
     'Expect:',
+    ...$translated['headers'],
 ];
 
 foreach ($headers as $name => $value) {

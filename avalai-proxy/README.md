@@ -13,7 +13,7 @@ PROXY_ACCESS_TOKEN=a-very-long-random-secret
 AVALAI_UPSTREAM_BASE_URL=https://api.avalai.ir
 PROXY_CONNECT_TIMEOUT=15
 PROXY_REQUEST_TIMEOUT=180
-PROXY_MAX_REQUEST_BYTES=20971520
+PROXY_MAX_REQUEST_BYTES=67108864
 ```
 
 اگر امکان تعریف environment variable ندارید، فایل `config.example.php` را با نام `config.php` کپی و مقادیر آن را تکمیل کنید. فایل `config.php` در git نادیده گرفته شده و نباید commit شود.
@@ -41,7 +41,7 @@ server {
     root /var/www/avalai-proxy;
     index index.php;
 
-    client_max_body_size 20m;
+    client_max_body_size 64m;
 
     location / {
         try_files $uri /index.php?$query_string;
@@ -93,5 +93,30 @@ curl -i https://webtogram.com/AvalAIProxy/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"سلام"}]}'
 ```
+
+تست vision از مسیر Responses API:
+
+```bash
+curl -i https://webtogram.com/AvalAIProxy/v1/responses \
+  -H "Authorization: Bearer real-avalai-api-key" \
+  -H "X-Proxy-Token: a-very-long-random-secret" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "input_text", "text": "این تصویر را کوتاه توصیف کن."},
+          {"type": "input_image", "image_url": "data:image/jpeg;base64,BASE64_IMAGE_HERE", "detail": "high"}
+        ]
+      }
+    ]
+  }'
+```
+
+برای سازگاری با AvalAI فعلی، پروکسی درخواست‌های `POST /v1/responses` را به
+`/v1/chat/completions` تبدیل می‌کند. `input_text` به `text` و `input_image` به
+`image_url` تبدیل می‌شود و محتوای base64 تصویر بدون ذخیره‌سازی عبور داده می‌شود.
 
 پروکسی فقط مسیرهای `/v1/*` را قبول می‌کند، redirect سمت upstream را دنبال نمی‌کند، TLS را اعتبارسنجی می‌کند و درخواست‌های بدون هر دو هدر امنیتی را با `401` رد می‌کند. هدر `X-Proxy-Token` به AvalAI ارسال نمی‌شود.

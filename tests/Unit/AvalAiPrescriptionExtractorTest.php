@@ -67,4 +67,41 @@ class AvalAiPrescriptionExtractorTest extends TestCase
         $this->assertSame('0.02500000', $log->estimated_cost_usd);
         $this->assertNotNull($log->duration_ms);
     }
+
+    public function test_it_can_route_avalai_requests_through_proxy(): void
+    {
+        config([
+            'services.avalai.key' => 'test-key',
+            'services.avalai.endpoint' => 'https://api.avalai.ir/v1',
+            'services.avalai.proxy_base_url' => 'https://webtogram.com/AvalAIProxy',
+            'services.avalai.proxy_token' => 'proxy-secret',
+            'services.avalai.vision_model' => 'gpt-5.5',
+            'services.avalai.input_cost_per_1m_tokens' => 5.00,
+            'services.avalai.output_cost_per_1m_tokens' => 30.00,
+        ]);
+
+        Http::fake([
+            'webtogram.com/AvalAIProxy/v1/responses' => Http::response([
+                'output_text' => json_encode(['tests' => []]),
+            ]),
+        ]);
+
+        $imagePath = tempnam(sys_get_temp_dir(), 'prescription') . '.jpg';
+        file_put_contents($imagePath, 'fake-image');
+
+        app(AvalAiPrescriptionExtractor::class)->extract($imagePath);
+
+        unlink($imagePath);
+
+        Http::assertSent(function ($request): bool {
+            return $request->url() === 'https://webtogram.com/AvalAIProxy/v1/responses'
+                && $request->hasHeader('Authorization', 'Bearer test-key')
+                && $request->hasHeader('X-Proxy-Token', 'proxy-secret');
+        });
+
+        $this->assertSame(
+            'https://webtogram.com/AvalAIProxy/v1/responses',
+            AiRequestLog::first()->endpoint,
+        );
+    }
 }

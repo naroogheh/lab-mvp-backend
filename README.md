@@ -93,11 +93,22 @@ Copy `.env.example` and fill the values used by your deployment.
 ```text
 AVALAI_API_KEY=
 AVALAI_ENDPOINT=https://api.avalai.ir/v1
+AVALAI_PROXY_BASE_URL=
+AVALAI_PROXY_TOKEN=
 AVALAI_VISION_MODEL=gpt-5.5
 AVALAI_INPUT_COST_PER_1M_TOKENS=5.00
 AVALAI_OUTPUT_COST_PER_1M_TOKENS=30.00
 CARD_TO_CARD_NUMBER=
 ```
+
+To route AvalAI traffic through the same proxy style as Pakoub, set:
+
+```text
+AVALAI_PROXY_BASE_URL=https://webtogram.com/AvalAIProxy
+AVALAI_PROXY_TOKEN=your-proxy-token
+```
+
+When `AVALAI_PROXY_BASE_URL` is set, the app sends requests to `/v1/responses` on that proxy and includes `X-Proxy-Token`.
 
 ## Tests
 

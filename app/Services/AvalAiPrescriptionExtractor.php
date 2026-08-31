@@ -11,7 +11,7 @@ class AvalAiPrescriptionExtractor
     public function extract(string $absoluteImagePath, ?int $prescriptionId = null, ?string $model = null): array
     {
         $model ??= config('services.avalai.vision_model');
-        $endpoint = rtrim(config('services.avalai.endpoint'), '/') . '/responses';
+        $endpoint = $this->endpoint();
         $imageDataUrl = $this->imageDataUrl($absoluteImagePath);
         $startedAt = microtime(true);
 
@@ -54,9 +54,16 @@ class AvalAiPrescriptionExtractor
         ]);
 
         try {
-            $response = Http::withToken(config('services.avalai.key'))
+            $request = Http::withToken(config('services.avalai.key'))
                 ->timeout(120)
-                ->post($endpoint, $payload);
+                ->acceptJson();
+
+            $headers = $this->proxyHeaders();
+            if ($headers !== []) {
+                $request = $request->withHeaders($headers);
+            }
+
+            $response = $request->post($endpoint, $payload);
 
             $responsePayload = $response->json() ?? ['raw_body' => $response->body()];
             $response->throw();
@@ -128,6 +135,43 @@ PROMPT;
         $mimeType = mime_content_type($absoluteImagePath) ?: 'image/jpeg';
 
         return 'data:' . $mimeType . ';base64,' . base64_encode(file_get_contents($absoluteImagePath));
+    }
+
+    private function endpoint(): string
+    {
+        $proxyBaseUrl = trim((string) config('services.avalai.proxy_base_url'));
+
+        if ($proxyBaseUrl !== '') {
+            return $this->responsesEndpoint($proxyBaseUrl);
+        }
+
+        return $this->responsesEndpoint((string) config('services.avalai.endpoint'));
+    }
+
+    /** @return array<string, string> */
+    private function proxyHeaders(): array
+    {
+        $proxyToken = trim((string) config('services.avalai.proxy_token'));
+
+        return $proxyToken !== ''
+            ? ['X-Proxy-Token' => $proxyToken]
+            : [];
+    }
+
+    private function responsesEndpoint(string $baseUrl): string
+    {
+        $baseUrl = rtrim(trim($baseUrl), '/');
+        $path = rtrim((string) parse_url($baseUrl, PHP_URL_PATH), '/');
+
+        if (str_ends_with($path, '/v1/responses')) {
+            return $baseUrl;
+        }
+
+        if (str_ends_with($path, '/v1')) {
+            return $baseUrl . '/responses';
+        }
+
+        return $baseUrl . '/v1/responses';
     }
 
     private function redactImagePayload(array $payload): array

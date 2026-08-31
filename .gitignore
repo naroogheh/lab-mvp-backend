@@ -1,6 +1,11 @@
 /vendor
 /node_modules
 /.env
+/auth.json
+/npm-debug.log
+/yarn-error.log
 /storage/*.key
 /public/storage
 /.phpunit.result.cache
+/.phpunit.cache
+/bootstrap/cache/*.php

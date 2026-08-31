@@ -35,4 +35,9 @@ class Prescription extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    public function aiRequestLogs(): HasMany
+    {
+        return $this->hasMany(AiRequestLog::class);
+    }
 }

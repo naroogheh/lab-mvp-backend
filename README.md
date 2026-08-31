@@ -52,3 +52,11 @@ CARD_TO_CARD_NUMBER=
 ```
 
 This repository intentionally keeps the MVP implementation readable and small. It can be dropped into a fresh Laravel app or used as the implementation map for the production codebase.
+
+## Tests
+
+The test suite covers the prescription upload API, tracking lookup, invoice visibility rules, operator item confirmation, card-to-card payment requests, and lab-test matching against the database.
+
+```text
+php artisan test
+```

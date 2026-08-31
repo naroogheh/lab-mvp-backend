@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Enums\AiRequestStatus;
 use App\Models\AiRequestLog;
+use App\Models\Prescription;
 use App\Services\AvalAiPrescriptionExtractor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -44,17 +45,18 @@ class AvalAiPrescriptionExtractorTest extends TestCase
             ]),
         ]);
 
+        $prescription = Prescription::factory()->create();
         $imagePath = tempnam(sys_get_temp_dir(), 'prescription') . '.jpg';
         file_put_contents($imagePath, 'fake-image');
 
-        $tests = app(AvalAiPrescriptionExtractor::class)->extract($imagePath, prescriptionId: 10);
+        $tests = app(AvalAiPrescriptionExtractor::class)->extract($imagePath, prescriptionId: $prescription->id);
 
         unlink($imagePath);
 
         $this->assertSame('CBC', $tests[0]['name']);
 
         $log = AiRequestLog::first();
-        $this->assertSame(10, $log->prescription_id);
+        $this->assertSame($prescription->id, $log->prescription_id);
         $this->assertSame('avalai', $log->provider);
         $this->assertSame('gpt-5.5', $log->model);
         $this->assertSame(AiRequestStatus::Succeeded, $log->status);

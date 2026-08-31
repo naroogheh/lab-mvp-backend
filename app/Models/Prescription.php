@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use App\Enums\PrescriptionStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Prescription extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'tracking_number',
         'image_path',
